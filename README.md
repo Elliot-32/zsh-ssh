@@ -100,7 +100,7 @@ Hashed `known_hosts` entries cannot be converted back to hostnames and are skipp
 
 ### fzf-tab integration
 
-When [fzf-tab](https://github.com/Aloxaf/fzf-tab) is loaded after zsh-ssh, zsh-ssh detects fzf-tab's completion-capture context and exposes its host sources as native Zsh completion groups instead of opening a second standalone fzf instance.
+When [fzf-tab](https://github.com/Aloxaf/fzf-tab) is active, zsh-ssh detects fzf-tab's completion-capture context and exposes its host sources as native Zsh completion groups instead of opening a second standalone fzf instance.
 
 With known hosts enabled, the groups are:
 
@@ -117,7 +117,7 @@ zstyle ':completion:*' menu no
 zstyle ':fzf-tab:*' switch-group '<' '>'
 ```
 
-Load zsh-ssh before fzf-tab so fzf-tab can wrap the Tab widget installed by zsh-ssh. This matches fzf-tab's recommendation that it should be the last plugin that binds <kbd>Tab</kbd>.
+Both plugin load orders are supported. If fzf-tab loads after zsh-ssh, it wraps zsh-ssh normally. If fzf-tab is already active when zsh-ssh loads, zsh-ssh temporarily unwraps it, installs its own Tab widget, and then re-enables fzf-tab so the resulting widget chain is the same. fzf-tab still needs Zsh's completion system (`compinit`) to be initialized first.
 
 Without fzf-tab, zsh-ssh keeps its existing standalone fzf interface and behavior.
 
