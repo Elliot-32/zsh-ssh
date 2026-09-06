@@ -13,6 +13,7 @@ Better host completion for ssh in Zsh.
         - [Manual (Git Clone)](#manual-git-clone)
     - [Usage](#usage)
         - [Configuration](#configuration)
+        - [fzf-tab integration](#fzf-tab-integration)
         - [SSH Config Example](#ssh-config-example)
 
 ## Installation
@@ -96,6 +97,29 @@ export ZSH_SSH_KNOWN_HOSTS_FILE="$HOME/.ssh/known_hosts"
 ```
 
 Hashed `known_hosts` entries cannot be converted back to hostnames and are skipped.
+
+### fzf-tab integration
+
+When [fzf-tab](https://github.com/Aloxaf/fzf-tab) is loaded after zsh-ssh, zsh-ssh detects fzf-tab's completion-capture context and exposes its host sources as native Zsh completion groups instead of opening a second standalone fzf instance.
+
+With known hosts enabled, the groups are:
+
+- `SSH Config` for aliases parsed from the SSH config and its `Include` files.
+- `Known Hosts` for plain hostnames parsed from `known_hosts`.
+
+For example, the standard fzf-tab group-switching configuration can use `<` and `>` to move between them:
+
+```shell
+export ZSH_SSH_INCLUDE_KNOWN_HOSTS=1
+
+zstyle ':completion:*:descriptions' format '[%d]'
+zstyle ':completion:*' menu no
+zstyle ':fzf-tab:*' switch-group '<' '>'
+```
+
+Load zsh-ssh before fzf-tab so fzf-tab can wrap the Tab widget installed by zsh-ssh. This matches fzf-tab's recommendation that it should be the last plugin that binds <kbd>Tab</kbd>.
+
+Without fzf-tab, zsh-ssh keeps its existing standalone fzf interface and behavior.
 
 ### SSH Config Example
 
