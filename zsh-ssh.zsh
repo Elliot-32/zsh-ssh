@@ -356,12 +356,75 @@ _set_lbuffer() {
   LBUFFER="$connect_cmd"
 }
 
+_zsh_ssh_compsys_complete() {
+  local query config_result known_hosts_result alias include_known_hosts matcher
+  local -a config_hosts known_hosts expl
+  local ret=1
+
+  setopt localoptions noshwordsplit noksh_arrays
+
+  query="${words[CURRENT]}"
+  include_known_hosts="${ZSH_SSH_INCLUDE_KNOWN_HOSTS:-0}"
+  matcher='m:{a-zA-Z}={A-Za-z} r:|.=* r:|=*'
+
+  # Keep the config and known_hosts sources separate so completion frontends
+  # such as fzf-tab can present them as independent groups.
+  local ZSH_SSH_INCLUDE_KNOWN_HOSTS=0
+  config_result=$(_ssh_host_list "$query")
+
+  while IFS='|' read -r alias _; do
+    [[ -n "$alias" ]] && config_hosts+=("$alias")
+  done <<< "$config_result"
+
+  if (( ${#config_hosts} )); then
+    if [[ "$query" == tag:* ]]; then
+      # tag: is a zsh-ssh query syntax rather than a literal host prefix.
+      # -U replaces the query word with the selected host, while clearing
+      # PREFIX prevents fzf-tab from using tag:... as its own search query.
+      local PREFIX=''
+      _wanted zsh-ssh-config expl 'SSH Config' \
+        compadd -U -M "$matcher" -- "${config_hosts[@]}" && ret=0
+    else
+      _wanted zsh-ssh-config expl 'SSH Config' \
+        compadd -M "$matcher" -- "${config_hosts[@]}" && ret=0
+    fi
+  fi
+
+  if [[ "$include_known_hosts" == "1" && "$query" != tag:* ]]; then
+    known_hosts_result=$(_ssh_known_hosts_list)
+    known_hosts_result=$(printf "%s\n" "$known_hosts_result" | command sort -u)
+
+    while IFS='|' read -r alias _; do
+      [[ -n "$alias" ]] && known_hosts+=("$alias")
+    done <<< "$known_hosts_result"
+
+    if (( ${#known_hosts} )); then
+      _wanted zsh-ssh-known-hosts expl 'Known Hosts' \
+        compadd -M "$matcher" -- "${known_hosts[@]}" && ret=0
+    fi
+  fi
+
+  return ret
+}
+
 fzf_complete_ssh() {
   local tokens cmd result key selection fuzzy_input
   setopt localoptions noshwordsplit noksh_arrays noposixbuiltins
 
   tokens=(${(z)LBUFFER})
   cmd=${tokens[1]}
+
+  # fzf-tab wraps the previously-bound Tab widget and sets IN_FZF_TAB while
+  # collecting normal Zsh completion candidates. In that context, feed it
+  # native completion groups instead of opening a second, standalone fzf.
+  if (( ${IN_FZF_TAB:-0} )) && [[ "$cmd" == "ssh" ]]; then
+    if [[ "$LBUFFER" =~ "^ *ssh$" || "${tokens[-1]}" == -* ]]; then
+      zle ${fzf_ssh_default_completion:-expand-or-complete}
+    else
+      zle zsh-ssh-complete
+    fi
+    return
+  fi
 
   if [[ "$LBUFFER" =~ "^ *ssh$" ]]; then
     zle ${fzf_ssh_default_completion:-expand-or-complete}
@@ -442,6 +505,7 @@ fzf_complete_ssh() {
 }
 
 
+zle -C zsh-ssh-complete complete-word _zsh_ssh_compsys_complete
 zle -N fzf_complete_ssh
 bindkey '^I' fzf_complete_ssh
 
