@@ -64,6 +64,12 @@ _test_initialize() {
   -ftb-fzf() {
     local ignored
     while IFS= read -r ignored; do :; done
+    local preview
+    local -a preview_flags
+    -ftb-zstyle -s fzf-preview preview
+    -ftb-zstyle -a fzf-flags preview_flags
+    print -r -- "PREVIEW|$preview" >> "$TEST_LOG"
+    print -r -- "FLAGS|${(j: :)preview_flags}" >> "$TEST_LOG"
     print -r -- 'SELECTOR|fzf-tab' >> "$TEST_LOG"
     print -r -- "$_ftb_query"
     print -r -- ENTER

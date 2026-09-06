@@ -131,13 +131,21 @@ ssh -vp2222 root@prod<Tab>
 ssh -l deploy tag:work<Tab>
 ```
 
-The login prefix and preceding options are preserved. `-F` selects an alternate SSH config, and `-F none` skips config aliases. Option values and remote command arguments use Zsh's standard SSH completion. Config entries show the hostname, configured user, tag and description; only the alias is inserted. Both groups use the same case-insensitive hostname matcher (for example, `p.w` matches `prod.web`). `tag:` filters only config entries and is replaced by the selected alias.
+The login prefix and preceding options are preserved. `-F` selects an alternate SSH config, and `-F none` skips config aliases. Option values and remote command arguments use Zsh's standard SSH completion. Both groups use the same case-insensitive hostname matcher (for example, `p.w` matches `prod.web`). `tag:` filters only config entries and is replaced by the selected alias.
+
+The fzf-tab interface retains the original host information:
+
+- Config entries use aligned `Alias -> Hostname`, `User`, optional `Tag`, and `Desc` columns. Only the selected alias is inserted.
+- A right-hand preview uses `ssh -T -G` to show the effective User, HostName, Port, ControlMaster, ForwardAgent, LocalForward, IdentityFile, RemoteForward, ProxyCommand and ProxyJump settings. It includes the selected login prefix, preceding SSH options and chosen config file.
+- The column heading and preview window default to a right-hand pane occupying 40% of the interface. Known Hosts entries also have the SSH settings preview.
+
+These are fallback fzf-tab preview/flag styles for SSH destinations only. Existing global styles, command-specific styles, and styles configured after loading the plugin take precedence. If you already set `fzf-preview` or `fzf-flags`, your settings control the corresponding preview or layout; an explicit empty preview disables it. Other commands, SSH option values, and remote command arguments do not receive the SSH preview.
 
 Initialize Zsh's completion system (`compinit`) and load both plugins before the first prompt. Either plugin order works: zsh-ssh defers its Tab binding until the first `precmd` hook and leaves the binding alone when fzf-tab is loaded. It does not disable or re-enable fzf-tab. If you later run `disable-fzf-tab`, SSH keeps ordinary grouped completion; `enable-fzf-tab` restores the fzf-tab interface.
 
 Without fzf-tab loaded, zsh-ssh binds its standalone fzf interface at the first prompt. The examples above describe native completion through fzf-tab; the standalone interface retains its existing behavior.
 
-To run the completion regression tests, use `zsh -f tests/completion.zsh`. Set `FZF_TAB_DIR` to a local fzf-tab checkout to also test both plugin orders and disabling/re-enabling fzf-tab. The tests use a pseudo-terminal and a deterministic selector, so no SSH connections are made.
+To run the completion regression tests, use `zsh -f tests/completion.zsh`. Set `FZF_TAB_DIR` to a local fzf-tab checkout to also test both plugin orders and disabling/re-enabling fzf-tab. The tests use a pseudo-terminal and a deterministic selector, so no SSH connections are made. Run `zsh -f tests/preview.zsh` to verify the preview fields, argument quoting and user-style precedence with a fake SSH executable.
 
 ### SSH Config Example
 

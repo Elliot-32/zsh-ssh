@@ -364,8 +364,10 @@ _set_lbuffer() {
 
 _zsh_ssh_compsys_complete() {
   local query record alias hostname user tag desc description_format
-  local -a config_hosts config_descriptions expl match_options
+  local -a config_hosts config_hostnames config_users config_tags config_descs
+  local -a config_descriptions expl match_options
   local -Ua known_hosts
+  local -i i alias_width=5 host_width=8 user_width=4 tag_width=0
   local ret=1
 
   setopt localoptions noshwordsplit noksh_arrays
@@ -383,11 +385,37 @@ _zsh_ssh_compsys_complete() {
       continue
     fi
     config_hosts+=("$alias")
-    record="$alias -- ${user:+$user@}$hostname"
-    [[ -n "$tag" ]] && record+=" [$tag]"
-    [[ -n "$desc" ]] && record+=" $desc"
-    config_descriptions+=("$record")
+    config_hostnames+=("$hostname")
+    config_users+=("${user:--}")
+    config_tags+=("${tag:+[$tag]}")
+    config_descs+=("$desc")
+    (( ${#alias} > alias_width )) && alias_width=${#alias}
+    (( ${#hostname} > host_width )) && host_width=${#hostname}
+    (( ${#user} > user_width )) && user_width=${#user}
+    [[ -n $tag ]] && (( ${#tag} + 2 > tag_width )) && tag_width=$(( ${#tag} + 2 ))
   done <<< "$(_ssh_config_records)"
+
+  for (( i = 1; i <= ${#config_hosts}; ++i )); do
+    printf -v record '%-*s  ->  %-*s  %-*s' \
+      "$alias_width" "$config_hosts[i]" "$host_width" "$config_hostnames[i]" \
+      "$user_width" "$config_users[i]"
+    if (( tag_width )); then
+      printf -v tag '  %-*s' "$tag_width" "${config_tags[i]:--}"
+      record+="$tag"
+    fi
+    config_descriptions+=("$record  $config_descs[i]")
+  done
+
+  if (( ${IN_FZF_TAB:-0} )); then
+    typeset -g _zsh_ssh_fzf_header
+    printf -v _zsh_ssh_fzf_header '%-*s  ->  %-*s  %-*s' \
+      "$alias_width" Alias "$host_width" Hostname "$user_width" User
+    if (( tag_width )); then
+      printf -v tag '  %-*s' "$tag_width" Tag
+      _zsh_ssh_fzf_header+="$tag"
+    fi
+    _zsh_ssh_fzf_header+='  Desc'
+  fi
 
   if [[ "$query" == tag:* ]]; then
     # Replace the whole tag query; fzf-tab should start with an empty search.
@@ -399,7 +427,7 @@ _zsh_ssh_compsys_complete() {
 
   if (( ${#config_hosts} )); then
     _wanted zsh-ssh-config expl 'SSH Config' \
-      compadd "${match_options[@]}" -d config_descriptions -- "${config_hosts[@]}" && ret=0
+      compadd "${match_options[@]}" -l -d config_descriptions -- "${config_hosts[@]}" && ret=0
   fi
 
   # Without descriptions, fzf-tab cannot distinguish the host sources.
@@ -469,6 +497,44 @@ _zsh_ssh_complete() {
     _zsh_ssh_compsys_complete
   else
     _ssh "$@"
+  fi
+}
+
+# fzf-tab evaluates this style in the completion shell, where words/CURRENT
+# are available. Its preview subprocess then supplies the selected word and
+# ignored login prefix through word/ctxt. Quote arguments at both boundaries.
+_zsh_ssh_preview_command() {
+  setopt localoptions noshwordsplit noksh_arrays
+  reply=()
+  [[ $_ftb_curcontext == *:ssh:* ]] || return 0
+  local SSH_CONFIG_FILE="$SSH_CONFIG_FILE"
+  _zsh_ssh_at_destination || return 0
+  local -a ssh_args=(ssh -T -G -F "$SSH_CONFIG_FILE")
+  ssh_args+=("${(@Q)words[2,CURRENT-1]}")
+  ssh_args=("${(@q)ssh_args}")
+  reply=("command ${(j: :)ssh_args}"' -- "${ctxt[IPREFIX]}$word" |
+    command awk '\''tolower($1) ~ /^(user|hostname|port|controlmaster|forwardagent|localforward|identityfile|remoteforward|proxycommand|proxyjump)$/ '\'' |
+    { if command -v column >/dev/null 2>&1; then command column -t; else command cat; fi; }')
+}
+
+_zsh_ssh_fzf_flags() {
+  setopt localoptions noshwordsplit noksh_arrays
+  reply=()
+  [[ $_ftb_curcontext == *:ssh:* ]] || return 0
+  local SSH_CONFIG_FILE="$SSH_CONFIG_FILE"
+  _zsh_ssh_at_destination || return 0
+  reply=("--header=$_zsh_ssh_fzf_header" '--preview-window=right:40%')
+}
+
+# A least-specific fallback lets every user-defined command preview win.
+# Preserve an existing global preview too, including an explicit empty value.
+() {
+  local -a preview_style
+  if ! zstyle -g preview_style ':fzf-tab:*' fzf-preview; then
+    zstyle -e ':fzf-tab:*' fzf-preview '_zsh_ssh_preview_command'
+  fi
+  if ! zstyle -g preview_style ':fzf-tab:*' fzf-flags; then
+    zstyle -e ':fzf-tab:*' fzf-flags '_zsh_ssh_fzf_flags'
   fi
 }
 

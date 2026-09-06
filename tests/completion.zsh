@@ -2,7 +2,7 @@
 # Run: zsh -f tests/completion.zsh
 # Optional: FZF_TAB_DIR=/path/to/fzf-tab zsh -f tests/completion.zsh
 emulate -R zsh
-setopt pipefail
+setopt pipefail extendedglob
 zmodload zsh/zpty || exit 1
 zmodload zsh/zselect || exit 1
 zmodload zsh/system || exit 1
@@ -94,7 +94,7 @@ for TEST_MODE in $modes; do
   fi
 
   complete 'ssh p.w'
-  check 'matcher config' "$result" 'CANDIDATE|prod.web|prod.web -- deploy@192.0.2.10 [work] Production web'
+  check 'matcher config columns' "${result//[[:blank:]]##/ }" 'CANDIDATE|prod.web|prod.web -> 192.0.2.10 deploy [work] Production web'
   check 'matcher known hosts' "$result" 'CANDIDATE|prod.web||'
   check 'config group' "$result" 'SSH Config'
   check 'known hosts group' "$result" 'Known Hosts'
@@ -135,6 +135,9 @@ for TEST_MODE in $modes; do
   complete 'ssh '
   if [[ $TEST_MODE == fzf-first || $TEST_MODE == plugin-first || $TEST_MODE == reenabled ]]; then
     check 'uses real fzf-tab pipeline' "$result" 'SELECTOR|fzf-tab'
+    check 'SSH preview connected' "$result" 'PREVIEW|command ssh -T -G -F '
+    check 'table heading' "$result" '--header=Alias'
+    check 'right-hand preview' "$result" '--preview-window=right:40%'
   fi
   check 'known hostname' "$result" 'CANDIDATE|known.example|'
   check 'port normalization' "$result" 'CANDIDATE|port.example|'
