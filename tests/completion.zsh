@@ -148,6 +148,41 @@ for TEST_MODE in $modes; do
   wait_for __SSH_SETTING__
   complete 'ssh '
   check 'grouped hosts ignore standalone opt-in' "$result" 'Known Hosts'
+
+  zpty -w ssh_test "zstyle -d ':completion:*:descriptions' format; unset ZSH_SSH_INCLUDE_KNOWN_HOSTS; print __SSH_SETTING__"
+  wait_for __SSH_SETTING__
+  complete 'ssh '
+  check 'config without descriptions' "$result" 'CANDIDATE|prod.web|'
+  reject 'no descriptions and unset flag' "$result" 'CANDIDATE|known.example|'
+  for enabled in 0 1; do
+    zpty -w ssh_test "ZSH_SSH_INCLUDE_KNOWN_HOSTS=$enabled; print __SSH_SETTING__"
+    wait_for __SSH_SETTING__
+    complete 'ssh '
+    if [[ $enabled == 1 ]]; then
+      check 'no descriptions with opt-in' "$result" 'CANDIDATE|known.example|'
+      reject 'no group label without descriptions' "$result" 'Known Hosts'
+    else
+      reject 'no descriptions with opt-out' "$result" 'CANDIDATE|known.example|'
+    fi
+  done
+  complete 'ssh tag:work'
+  reject 'tag query excludes opted-in known hosts' "$result" 'CANDIDATE|known.example|'
+
+  zpty -w ssh_test "zstyle ':completion:*:descriptions' format ''; ZSH_SSH_INCLUDE_KNOWN_HOSTS=0; print __SSH_SETTING__"
+  wait_for __SSH_SETTING__
+  complete 'ssh '
+  reject 'empty format requires opt-in' "$result" 'CANDIDATE|known.example|'
+
+  zpty -w ssh_test "zstyle ':completion:*:ssh:*:descriptions' format '[%d]'; print __SSH_SETTING__"
+  wait_for __SSH_SETTING__
+  complete 'ssh '
+  check 'SSH-specific description format' "$result" 'CANDIDATE|known.example|'
+  check 'SSH-specific group label' "$result" 'Known Hosts'
+
+  zpty -w ssh_test "zstyle ':completion:*:descriptions' format '[%d]'; zstyle ':completion:*:ssh:*:descriptions' format ''; print __SSH_SETTING__"
+  wait_for __SSH_SETTING__
+  complete 'ssh '
+  reject 'specific empty format overrides global format' "$result" 'CANDIDATE|known.example|'
   zpty -d ssh_test
   print -- "PASS $TEST_MODE"
 done

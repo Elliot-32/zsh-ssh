@@ -363,7 +363,7 @@ _set_lbuffer() {
 }
 
 _zsh_ssh_compsys_complete() {
-  local query record alias hostname user tag desc
+  local query record alias hostname user tag desc description_format
   local -a config_hosts config_descriptions expl match_options
   local -Ua known_hosts
   local ret=1
@@ -402,9 +402,11 @@ _zsh_ssh_compsys_complete() {
       compadd "${match_options[@]}" -d config_descriptions -- "${config_hosts[@]}" && ret=0
   fi
 
-  # Grouped completion always exposes known hosts as a separate source.
-  # The opt-in setting only controls the standalone UI's combined list.
-  if [[ "$query" != tag:* ]]; then
+  # Without descriptions, fzf-tab cannot distinguish the host sources.
+  # Respect the current completion context, including an explicit empty format.
+  zstyle -s ":completion:${curcontext}:descriptions" format description_format
+  if [[ "$query" != tag:* &&
+        ( -n "$description_format" || "${ZSH_SSH_INCLUDE_KNOWN_HOSTS:-0}" == 1 ) ]]; then
     known_hosts=("${(@f)$(_ssh_known_hosts)}")
     known_hosts=("${(@)known_hosts:#}")
 

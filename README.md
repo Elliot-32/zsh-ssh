@@ -84,9 +84,9 @@ Just press <kbd>Tab</kbd> after `ssh` command as usual.
 
 ### Configuration
 
-Native grouped completion (including fzf-tab) always includes plain hostnames from `~/.ssh/known_hosts` in a separate `Known Hosts` group. No opt-in setting is needed.
+Native completion (including fzf-tab) includes plain hostnames from `~/.ssh/known_hosts` automatically when the current completion context has a non-empty `descriptions` format. This allows fzf-tab to show a separate `Known Hosts` group.
 
-The standalone fzf interface uses a combined list and excludes known hosts by default. To include them in that interface, enable:
+Without a description format (or with an empty format), known hosts are excluded unless `ZSH_SSH_INCLUDE_KNOWN_HOSTS=1`. The same opt-in applies to the standalone fzf interface's combined list:
 
 ```shell
 export ZSH_SSH_INCLUDE_KNOWN_HOSTS=1
@@ -120,7 +120,7 @@ zstyle ':completion:*' menu no
 zstyle ':fzf-tab:*' switch-group '<' '>'
 ```
 
-zsh-ssh does not set these global styles itself. Without a description format, known hosts are still offered, but fzf-tab cannot distinguish the two groups.
+zsh-ssh does not set these global styles itself. Without a description format, `ZSH_SSH_INCLUDE_KNOWN_HOSTS=1` adds known hosts to the combined candidate list; leaving it unset or setting it to `0` keeps only config aliases. With a non-empty description format, both sources are offered regardless of this flag. `tag:` queries always search config entries only.
 
 The destination can include a login name or follow SSH options, for example:
 
