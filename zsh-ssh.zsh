@@ -505,8 +505,25 @@ fzf_complete_ssh() {
 }
 
 
+# If fzf-tab is already active, temporarily unwrap it so its saved fallback
+# becomes zsh-ssh's real fallback rather than fzf-tab-complete itself. After
+# installing the zsh-ssh widget, enable fzf-tab again so it wraps zsh-ssh.
+_zsh_ssh_reenable_fzf_tab=0
+if (( $+functions[disable-fzf-tab] && $+functions[enable-fzf-tab] && $+_ftb_orig_widget )); then
+  _zsh_ssh_reenable_fzf_tab=1
+  if [[ -z "$fzf_ssh_default_completion" || "$fzf_ssh_default_completion" == "fzf-tab-complete" ]]; then
+    fzf_ssh_default_completion="${_ftb_orig_widget:-expand-or-complete}"
+  fi
+  disable-fzf-tab
+fi
+
 zle -C zsh-ssh-complete complete-word _zsh_ssh_compsys_complete
 zle -N fzf_complete_ssh
 bindkey '^I' fzf_complete_ssh
+
+if (( _zsh_ssh_reenable_fzf_tab )); then
+  enable-fzf-tab
+fi
+unset _zsh_ssh_reenable_fzf_tab
 
 # vim: set ft=zsh sw=2 ts=2 et
