@@ -14,7 +14,7 @@ if [[ $TEST_MODE != compinit-after ]]; then
 fi
 export SSH_CONFIG_FILE="$TEST_ROOT/tests/ssh_config"
 export ZSH_SSH_KNOWN_HOSTS_FILE="$TEST_ROOT/tests/known_hosts"
-export ZSH_SSH_INCLUDE_KNOWN_HOSTS=1
+unset ZSH_SSH_INCLUDE_KNOWN_HOSTS
 zstyle ':completion:*:descriptions' format '[%d]'
 zstyle ':completion:*' menu no
 zstyle ':completion:*' remote-access false

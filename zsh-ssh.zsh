@@ -402,7 +402,9 @@ _zsh_ssh_compsys_complete() {
       compadd "${match_options[@]}" -d config_descriptions -- "${config_hosts[@]}" && ret=0
   fi
 
-  if [[ "${ZSH_SSH_INCLUDE_KNOWN_HOSTS:-0}" == "1" && "$query" != tag:* ]]; then
+  # Grouped completion always exposes known hosts as a separate source.
+  # The opt-in setting only controls the standalone UI's combined list.
+  if [[ "$query" != tag:* ]]; then
     known_hosts=("${(@f)$(_ssh_known_hosts)}")
     known_hosts=("${(@)known_hosts:#}")
 

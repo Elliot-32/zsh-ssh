@@ -84,7 +84,9 @@ Just press <kbd>Tab</kbd> after `ssh` command as usual.
 
 ### Configuration
 
-Known hosts are not included by default. To include plain hostnames from `~/.ssh/known_hosts`, enable it explicitly:
+Native grouped completion (including fzf-tab) always includes plain hostnames from `~/.ssh/known_hosts` in a separate `Known Hosts` group. No opt-in setting is needed.
+
+The standalone fzf interface uses a combined list and excludes known hosts by default. To include them in that interface, enable:
 
 ```shell
 export ZSH_SSH_INCLUDE_KNOWN_HOSTS=1
@@ -102,20 +104,23 @@ Hashed `known_hosts` entries cannot be converted back to hostnames and are skipp
 
 zsh-ssh registers an SSH completion function with Zsh's completion system (`compdef`). [fzf-tab](https://github.com/Aloxaf/fzf-tab) can capture its host sources as native completion groups and display them in its own interface.
 
-With known hosts enabled, the groups are:
+The groups are:
 
 - `SSH Config` for aliases parsed from the SSH config and its `Include` files.
 - `Known Hosts` for plain hostnames parsed from `known_hosts`.
 
-For example, the standard fzf-tab group-switching configuration can use `<` and `>` to move between them:
+fzf-tab needs a non-empty description format to recognize and display groups. If you already have an equivalent format configured, keep it. `menu no` is recommended so Zsh's own completion menu does not interfere with fzf-tab. Changing the group-switching keys is optional; fzf-tab defaults to `F1` and `F2`.
 
 ```shell
-export ZSH_SSH_INCLUDE_KNOWN_HOSTS=1
-
+# Required for fzf-tab group support; an existing equivalent format also works.
 zstyle ':completion:*:descriptions' format '[%d]'
+# Recommended for fzf-tab completion handling.
 zstyle ':completion:*' menu no
+# Optional: use < and > instead of the default F1 and F2.
 zstyle ':fzf-tab:*' switch-group '<' '>'
 ```
+
+zsh-ssh does not set these global styles itself. Without a description format, known hosts are still offered, but fzf-tab cannot distinguish the two groups.
 
 The destination can include a login name or follow SSH options, for example:
 

@@ -147,7 +147,7 @@ for TEST_MODE in $modes; do
   zpty -w ssh_test 'ZSH_SSH_INCLUDE_KNOWN_HOSTS=0; print __SSH_SETTING__'
   wait_for __SSH_SETTING__
   complete 'ssh '
-  reject 'known hosts disabled' "$result" 'Known Hosts'
+  check 'grouped hosts ignore standalone opt-in' "$result" 'Known Hosts'
   zpty -d ssh_test
   print -- "PASS $TEST_MODE"
 done
