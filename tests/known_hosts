@@ -1,0 +1,7 @@
+prod.web ssh-ed25519 AAAA
+prod.web ssh-rsa BBBB
+known.example,192.0.2.20 ssh-ed25519 CCCC
+[port.example]:2222 ssh-ed25519 DDDD
+|1|salt|hash ssh-ed25519 EEEE
+@revoked revoked.example ssh-ed25519 FFFF
+*.wildcard.example ssh-ed25519 GGGG

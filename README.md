@@ -100,7 +100,7 @@ Hashed `known_hosts` entries cannot be converted back to hostnames and are skipp
 
 ### fzf-tab integration
 
-When [fzf-tab](https://github.com/Aloxaf/fzf-tab) is active, zsh-ssh detects fzf-tab's completion-capture context and exposes its host sources as native Zsh completion groups instead of opening a second standalone fzf instance.
+zsh-ssh registers an SSH completion function with Zsh's completion system (`compdef`). [fzf-tab](https://github.com/Aloxaf/fzf-tab) can capture its host sources as native completion groups and display them in its own interface.
 
 With known hosts enabled, the groups are:
 
@@ -117,9 +117,22 @@ zstyle ':completion:*' menu no
 zstyle ':fzf-tab:*' switch-group '<' '>'
 ```
 
-Both plugin load orders are supported. If fzf-tab loads after zsh-ssh, it wraps zsh-ssh normally. If fzf-tab is already active when zsh-ssh loads, zsh-ssh temporarily unwraps it, installs its own Tab widget, and then re-enables fzf-tab so the resulting widget chain is the same. fzf-tab still needs Zsh's completion system (`compinit`) to be initialized first.
+The destination can include a login name or follow SSH options, for example:
 
-Without fzf-tab, zsh-ssh keeps its existing standalone fzf interface and behavior.
+```shell
+ssh root@prod<Tab>
+ssh -p 2222 prod<Tab>
+ssh -vp2222 root@prod<Tab>
+ssh -l deploy tag:work<Tab>
+```
+
+The login prefix and preceding options are preserved. `-F` selects an alternate SSH config, and `-F none` skips config aliases. Option values and remote command arguments use Zsh's standard SSH completion. Config entries show the hostname, configured user, tag and description; only the alias is inserted. Both groups use the same case-insensitive hostname matcher (for example, `p.w` matches `prod.web`). `tag:` filters only config entries and is replaced by the selected alias.
+
+Initialize Zsh's completion system (`compinit`) and load both plugins before the first prompt. Either plugin order works: zsh-ssh defers its Tab binding until the first `precmd` hook and leaves the binding alone when fzf-tab is loaded. It does not disable or re-enable fzf-tab. If you later run `disable-fzf-tab`, SSH keeps ordinary grouped completion; `enable-fzf-tab` restores the fzf-tab interface.
+
+Without fzf-tab loaded, zsh-ssh binds its standalone fzf interface at the first prompt. The examples above describe native completion through fzf-tab; the standalone interface retains its existing behavior.
+
+To run the completion regression tests, use `zsh -f tests/completion.zsh`. Set `FZF_TAB_DIR` to a local fzf-tab checkout to also test both plugin orders and disabling/re-enabling fzf-tab. The tests use a pseudo-terminal and a deterministic selector, so no SSH connections are made.
 
 ### SSH Config Example
 

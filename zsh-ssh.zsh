@@ -99,7 +99,7 @@ _parse_config_file() {
   }
 }
 
-_ssh_known_hosts_list() {
+_ssh_known_hosts() {
   local known_hosts_file="${ZSH_SSH_KNOWN_HOSTS_FILE:-$HOME/.ssh/known_hosts}"
 
   [[ -f "$known_hosts_file" ]] || return 0
@@ -117,7 +117,7 @@ _ssh_known_hosts_list() {
       }
 
       if (host) {
-        printf "%s|->|%s| | |[\033[00;34mknown_hosts\033[0m]\n", host, host
+        print host
       }
     }
 
@@ -133,15 +133,23 @@ _ssh_known_hosts_list() {
   ' "$known_hosts_file"
 }
 
-_ssh_host_list() {
-  local ssh_config host_list tag_query
+_ssh_known_hosts_list() {
+  _ssh_known_hosts | command awk '{
+    printf "%s|->|%s| | |[\033[00;34mknown_hosts\033[0m]\n", $0, $0
+  }'
+}
+
+# Unstyled records shared by the standalone UI and native completion.
+# Fields: alias | hostname | user | tag | description.
+_ssh_config_records() {
+  local ssh_config
 
   ssh_config=$(_parse_config_file "$SSH_CONFIG_FILE")
   ssh_config=$(printf "%s\n" "$ssh_config" | command grep -v -E "^\s*#[^_]")
   # Ensure blank line before each Host/Match block for AWK paragraph mode (RS="")
   ssh_config=$(printf "%s\n" "$ssh_config" | command awk '/^[[:space:]]*[Hh]ost[[:space:]]|^[[:space:]]*[Mm]atch[[:space:]]/{print ""} {print}')
 
-  host_list=$(printf "%s\n" "$ssh_config" | command awk '
+  printf "%s\n" "$ssh_config" | command awk '
     function join(array, start, end, sep, result, i) {
       # https://www.gnu.org/software/gawk/manual/html_node/Join-Function.html
       if (sep == "")
@@ -179,19 +187,12 @@ _ssh_host_list() {
     {
       match_directive = ""
 
-      # Use spaces to ensure the column command maintains the correct number of columns.
-      #   - user
-      #   - tag_formated
-      #   - desc_formated
-
-      user = " "
+      user = ""
       host_name = ""
       alias = ""
       aliases = ""
       tag = ""
-      tag_formated = " "
       desc = ""
-      desc_formated = " "
 
       for (line_num = 1; line_num <= NF; ++line_num) {
         line = parse_line($line_num)
@@ -210,14 +211,6 @@ _ssh_host_list() {
         if (key == "#_desc") { desc = value }
       }
 
-      if (tag) {
-        tag_formated = sprintf("[\033[00;36m%s\033[0m]", tag)
-      }
-
-      if (desc) {
-        desc_formated = sprintf("[\033[00;34m%s\033[0m]", desc)
-      }
-
       n_aliases = split(aliases, alias_list, " ")
       for (i = 1; i <= n_aliases; i++) {
         alias = alias_list[i]
@@ -232,30 +225,43 @@ _ssh_host_list() {
         if (!(alias in alias_hn)) {
           alias_hn[alias] = effective_hostname
           alias_user[alias] = user
-          alias_tag[alias] = tag_formated
-          alias_desc[alias] = desc_formated
+          alias_tag[alias] = tag
+          alias_desc[alias] = desc
           if (host_name) alias_explicit_hn[alias] = 1
         } else {
           if (host_name && !alias_explicit_hn[alias]) {
             alias_hn[alias] = host_name
             alias_explicit_hn[alias] = 1
           }
-          if (user != " " && alias_user[alias] == " ") {
+          if (user && !alias_user[alias]) {
             alias_user[alias] = user
           }
-          if (tag_formated != " " && alias_tag[alias] == " ") {
-            alias_tag[alias] = tag_formated
+          if (tag && !alias_tag[alias]) {
+            alias_tag[alias] = tag
           }
-          if (desc_formated != " " && alias_desc[alias] == " ") {
-            alias_desc[alias] = desc_formated
+          if (desc && !alias_desc[alias]) {
+            alias_desc[alias] = desc
           }
         }
       }
     }
     END {
       for (a in alias_hn) {
-        printf "%s|->|%s|%s|%s|%s\n", a, alias_hn[a], alias_user[a], alias_tag[a], alias_desc[a]
+        printf "%s|%s|%s|%s|%s\n", a, alias_hn[a], alias_user[a], alias_tag[a], alias_desc[a]
       }
+    }
+  '
+}
+
+_ssh_host_list() {
+  local host_list tag_query
+
+  host_list=$(_ssh_config_records | command awk -F '|' '
+    {
+      user = $3 ? $3 : " "
+      tag = $4 ? sprintf("[\033[00;36m%s\033[0m]", $4) : " "
+      desc = $5 ? sprintf("[\033[00;34m%s\033[0m]", $5) : " "
+      printf "%s|->|%s|%s|%s|%s\n", $1, $2, user, tag, desc
     }
   ')
 
@@ -357,63 +363,105 @@ _set_lbuffer() {
 }
 
 _zsh_ssh_compsys_complete() {
-  local query config_result known_hosts_result alias include_known_hosts matcher
-  local -a config_hosts known_hosts expl
+  local query record alias hostname user tag desc
+  local -a config_hosts config_descriptions expl match_options
+  local -Ua known_hosts
   local ret=1
 
   setopt localoptions noshwordsplit noksh_arrays
 
-  query="${words[CURRENT]}"
-  include_known_hosts="${ZSH_SSH_INCLUDE_KNOWN_HOSTS:-0}"
-  matcher='m:{a-zA-Z}={A-Za-z} r:|.=* r:|=*'
+  # Preserve the login prefix when replacing only the destination hostname.
+  compset -P '*@'
+  query="$PREFIX$SUFFIX"
+  match_options=(-M 'm:{a-zA-Z}={A-Za-z} r:|.=* r:|=*')
 
-  # Keep the config and known_hosts sources separate so completion frontends
-  # such as fzf-tab can present them as independent groups.
-  local ZSH_SSH_INCLUDE_KNOWN_HOSTS=0
-  config_result=$(_ssh_host_list "$query")
-
-  while IFS='|' read -r alias _; do
-    [[ -n "$alias" ]] && config_hosts+=("$alias")
-  done <<< "$config_result"
-
-  if (( ${#config_hosts} )); then
-    if [[ "$query" == tag:* ]]; then
-      # tag: is a zsh-ssh query syntax rather than a literal host prefix.
-      # -U replaces the query word with the selected host, while clearing
-      # PREFIX prevents fzf-tab from using tag:... as its own search query.
-      local PREFIX=''
-      _wanted zsh-ssh-config expl 'SSH Config' \
-        compadd -U -M "$matcher" -- "${config_hosts[@]}" && ret=0
-    else
-      _wanted zsh-ssh-config expl 'SSH Config' \
-        compadd -M "$matcher" -- "${config_hosts[@]}" && ret=0
+  # Only tag: is a source filter. Ordinary input is matched by compsys for
+  # both groups, so grep cannot discard candidates before the matcher runs.
+  while IFS='|' read -r alias hostname user tag desc; do
+    [[ -n "$alias" ]] || continue
+    if [[ "$query" == tag:* && "${(L)tag}" != *"${(L)${query#tag:}}"* ]]; then
+      continue
     fi
+    config_hosts+=("$alias")
+    record="$alias -- ${user:+$user@}$hostname"
+    [[ -n "$tag" ]] && record+=" [$tag]"
+    [[ -n "$desc" ]] && record+=" $desc"
+    config_descriptions+=("$record")
+  done <<< "$(_ssh_config_records)"
+
+  if [[ "$query" == tag:* ]]; then
+    # Replace the whole tag query; fzf-tab should start with an empty search.
+    PREFIX=''
+    SUFFIX=''
+    # -U ignores IPREFIX/ISUFFIX, so pass them explicitly for user@tag:...
+    match_options=(-U -i "$IPREFIX" -I "$ISUFFIX")
   fi
 
-  if [[ "$include_known_hosts" == "1" && "$query" != tag:* ]]; then
-    known_hosts_result=$(_ssh_known_hosts_list)
-    known_hosts_result=$(printf "%s\n" "$known_hosts_result" | command sort -u)
+  if (( ${#config_hosts} )); then
+    _wanted zsh-ssh-config expl 'SSH Config' \
+      compadd "${match_options[@]}" -d config_descriptions -- "${config_hosts[@]}" && ret=0
+  fi
 
-    while IFS='|' read -r alias _; do
-      [[ -n "$alias" ]] && known_hosts+=("$alias")
-    done <<< "$known_hosts_result"
+  if [[ "${ZSH_SSH_INCLUDE_KNOWN_HOSTS:-0}" == "1" && "$query" != tag:* ]]; then
+    known_hosts=("${(@f)$(_ssh_known_hosts)}")
+    known_hosts=("${(@)known_hosts:#}")
 
     if (( ${#known_hosts} )); then
       _wanted zsh-ssh-known-hosts expl 'Known Hosts' \
-        compadd -M "$matcher" -- "${known_hosts[@]}" && ret=0
+        compadd "${match_options[@]}" -- "${known_hosts[@]}" && ret=0
     fi
   fi
 
   return ret
 }
 
-# Enter zsh-ssh through the regular completion system when completing ssh's
-# first positional argument.  fzf-tab can only capture candidates produced in
-# the completion widget that it wrapped; starting another `zle -C` widget from
-# inside that wrapper makes the candidates belong to a separate completion
-# context and leaves fzf-tab's capture array empty.
+# Locate the destination before handing option values and remote commands to
+# _ssh. Handle attached values (-p2222) and short option clusters (-vp2222).
+_zsh_ssh_at_destination() {
+  local word option value
+  local -i i j end_options=0
+
+  for (( i = 2; i < CURRENT; ++i )); do
+    word=${words[i]}
+    (( end_options )) && return 1
+    case "$word" in
+      --) end_options=1 ;;
+      -?*)
+        for (( j = 2; j <= ${#word}; ++j )); do
+          option=${word[j]}
+          case "$option" in
+            # These operations have no destination argument.
+            Q|V) return 1 ;;
+            B|b|c|D|E|e|F|I|i|J|L|l|m|O|o|P|p|R|S|W|w)
+              if (( j == ${#word} )); then
+                (( ++i < CURRENT )) || return 1
+                value=${words[i]}
+              else
+                value=${word[j+1,-1]}
+              fi
+              # SSH_CONFIG_FILE is local to the calling completion function.
+              if [[ $option == F ]]; then
+                [[ $value == none ]] && SSH_CONFIG_FILE=/dev/null || SSH_CONFIG_FILE=${(Q)value}
+              fi
+              break
+              ;;
+            4|6|A|a|C|f|G|g|K|k|M|N|n|q|s|T|t|v|X|x|Y|y) ;;
+            *) return 1 ;;
+          esac
+        done
+        ;;
+      *) return 1 ;;
+    esac
+  done
+
+  (( end_options )) || [[ "${words[CURRENT]}" != -* ]]
+}
+
+# Produce candidates inside the completion widget wrapped by fzf-tab.
 _zsh_ssh_complete() {
-  if (( CURRENT == 2 )) && [[ "${words[CURRENT]}" != -* ]]; then
+  setopt localoptions noshwordsplit noksh_arrays
+  local SSH_CONFIG_FILE="$SSH_CONFIG_FILE"
+  if _zsh_ssh_at_destination; then
     _zsh_ssh_compsys_complete
   else
     _ssh "$@"
