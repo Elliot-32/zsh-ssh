@@ -13,6 +13,7 @@ Better host completion for ssh in Zsh.
         - [Manual (Git Clone)](#manual-git-clone)
     - [Usage](#usage)
         - [Configuration](#configuration)
+        - [fzf-tab integration](#fzf-tab-integration)
         - [SSH Config Example](#ssh-config-example)
 
 ## Installation
@@ -83,7 +84,9 @@ Just press <kbd>Tab</kbd> after `ssh` command as usual.
 
 ### Configuration
 
-Known hosts are not included by default. To include plain hostnames from `~/.ssh/known_hosts`, enable it explicitly:
+Native completion (including fzf-tab) includes plain hostnames from `~/.ssh/known_hosts` automatically when the current completion context has a non-empty `descriptions` format. This allows fzf-tab to show a separate `Known Hosts` group.
+
+Without a description format (or with an empty format), known hosts are excluded unless `ZSH_SSH_INCLUDE_KNOWN_HOSTS=1`. The same opt-in applies to the standalone fzf interface's combined list:
 
 ```shell
 export ZSH_SSH_INCLUDE_KNOWN_HOSTS=1
@@ -96,6 +99,53 @@ export ZSH_SSH_KNOWN_HOSTS_FILE="$HOME/.ssh/known_hosts"
 ```
 
 Hashed `known_hosts` entries cannot be converted back to hostnames and are skipped.
+
+### fzf-tab integration
+
+zsh-ssh registers an SSH completion function with Zsh's completion system (`compdef`). [fzf-tab](https://github.com/Aloxaf/fzf-tab) can capture its host sources as native completion groups and display them in its own interface.
+
+The groups are:
+
+- `SSH Config` for aliases parsed from the SSH config and its `Include` files.
+- `Known Hosts` for plain hostnames parsed from `known_hosts`.
+
+fzf-tab needs a non-empty description format to recognize and display groups. If you already have an equivalent format configured, keep it. `menu no` is recommended so Zsh's own completion menu does not interfere with fzf-tab. Changing the group-switching keys is optional; fzf-tab defaults to `F1` and `F2`.
+
+```shell
+# Required for fzf-tab group support; an existing equivalent format also works.
+zstyle ':completion:*:descriptions' format '[%d]'
+# Recommended for fzf-tab completion handling.
+zstyle ':completion:*' menu no
+# Optional: use < and > instead of the default F1 and F2.
+zstyle ':fzf-tab:*' switch-group '<' '>'
+```
+
+zsh-ssh does not set these global styles itself. Without a description format, `ZSH_SSH_INCLUDE_KNOWN_HOSTS=1` adds known hosts to the combined candidate list; leaving it unset or setting it to `0` keeps only config aliases. With a non-empty description format, both sources are offered regardless of this flag. `tag:` queries always search config entries only.
+
+The destination can include a login name or follow SSH options, for example:
+
+```shell
+ssh root@prod<Tab>
+ssh -p 2222 prod<Tab>
+ssh -vp2222 root@prod<Tab>
+ssh -l deploy tag:work<Tab>
+```
+
+The login prefix and preceding options are preserved. `-F` selects an alternate SSH config, and `-F none` skips config aliases. Option values and remote command arguments use Zsh's standard SSH completion. Both groups use the same case-insensitive hostname matcher (for example, `p.w` matches `prod.web`). `tag:` filters only config entries and is replaced by the selected alias.
+
+The fzf-tab interface retains the original host information:
+
+- Config entries use aligned `Alias -> Hostname`, `User`, optional `Tag`, and `Desc` columns. Only the selected alias is inserted.
+- A right-hand preview uses `ssh -T -G` to show the effective User, HostName, Port, ControlMaster, ForwardAgent, LocalForward, IdentityFile, RemoteForward, ProxyCommand and ProxyJump settings. It includes the selected login prefix, preceding SSH options and chosen config file.
+- The column heading and preview window default to a right-hand pane occupying 40% of the interface. Known Hosts entries also have the SSH settings preview.
+
+These are fallback fzf-tab preview/flag styles for SSH destinations only. Existing global styles, command-specific styles, and styles configured after loading the plugin take precedence. If you already set `fzf-preview` or `fzf-flags`, your settings control the corresponding preview or layout; an explicit empty preview disables it. Other commands, SSH option values, and remote command arguments do not receive the SSH preview.
+
+Initialize Zsh's completion system (`compinit`) and load both plugins before the first prompt. Either plugin order works: zsh-ssh defers its Tab binding until the first `precmd` hook and leaves the binding alone when fzf-tab is loaded. It does not disable or re-enable fzf-tab. If you later run `disable-fzf-tab`, SSH keeps ordinary grouped completion; `enable-fzf-tab` restores the fzf-tab interface.
+
+Without fzf-tab loaded, zsh-ssh binds its standalone fzf interface at the first prompt. The examples above describe native completion through fzf-tab; the standalone interface retains its existing behavior.
+
+To run the completion regression tests, use `zsh -f tests/completion.zsh`. Set `FZF_TAB_DIR` to a local fzf-tab checkout to also test both plugin orders and disabling/re-enabling fzf-tab. The tests use a pseudo-terminal and a deterministic selector, so no SSH connections are made. Run `zsh -f tests/preview.zsh` to verify the preview fields, argument quoting and user-style precedence with a fake SSH executable.
 
 ### SSH Config Example
 

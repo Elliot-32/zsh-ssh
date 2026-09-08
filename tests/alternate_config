@@ -1,0 +1,3 @@
+Host alternate
+    HostName alternate.example
+    User test

@@ -1,0 +1,20 @@
+Host prod.web
+    HostName 192.0.2.10
+    User deploy
+    Tag work
+    #_Desc Production web
+Host backup
+    HostName 192.0.2.11
+    Tag Work
+Host home
+    HostName 192.0.2.12
+    Tag personal
+Host inherited
+    #_Desc From first block
+Host inherited
+    HostName inherited.example
+    User admin
+    Tag work
+Include config.d/*.conf
+Host *
+    ServerAliveInterval 60
